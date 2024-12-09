@@ -1,8 +1,25 @@
-import tkinter as tk
+import pygame
 import math
-from tkinter import simpledialog, messagebox
+import sys
+from pygame.locals import QUIT, MOUSEBUTTONDOWN
 
+# Инициализация Pygame
+pygame.init()
 
+# Параметры окна
+WIDTH = 1600
+HEIGHT = 800
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Симуляция волн и поплавков")
+
+# Цвета
+WHITE = (255, 255, 255)
+BLUE = (0, 0, 255)
+RED = (255, 0, 0)
+BLACK = (0, 0, 0)
+GRAY = (200, 200, 200)
+
+# Параметры волн и поплавков
 waves = [
     {"amplitude": 1, "period": 2, "speed": 1},
     {"amplitude": 0.5, "period": 3, "speed": 0.8},
@@ -14,94 +31,127 @@ buoys = [
     {"mass": 0.8, "volume": 0.9, "position": 8},
 ]
 
-# Настройки окна
-WIDTH = 800
-HEIGHT = 400
-
-# окно
-root = tk.Tk()
-root.title("Симуляция волн и поплавков")
-
-# рисование
-canvas = tk.Canvas(root, width=WIDTH, height=HEIGHT)
-canvas.pack()
 
 # Функция для рисования волн
 def draw_wave(wave, frame):
     for x in range(0, WIDTH):
         y = wave["amplitude"] * math.sin(2 * math.pi * (x / (WIDTH / wave["period"]) - frame * wave["speed"] / 100))
-        canvas.create_line(x, HEIGHT // 2 - y * 50, x + 1, HEIGHT // 2 - y * 50, fill="blue", width=2)
+        pygame.draw.line(screen, BLUE, (x, HEIGHT // 2 - y * 50), (x + 1, HEIGHT // 2 - y * 50))
 
-# Функция для рисования поплавков с арихимедом
+
+# Функция для рисования поплавков с учетом силы Архимеда
 def draw_buoy(buoy, frame):
     wave_height = sum(
-        wave["amplitude"] * math.sin(2 * math.pi * (buoy["position"] * 50 / wave["period"] - frame * wave["speed"] / 100))
+        wave["amplitude"] * math.sin(
+            2 * math.pi * (buoy["position"] * WIDTH / len(waves) / wave["period"] - frame * wave["speed"] / 100))
         for wave in waves
     )
-    buoy_y = HEIGHT // 2 - wave_height * 50 - (buoy["mass"] - buoy["volume"]) * 10  # Применение силы Архимеда
-    canvas.create_oval(buoy["position"] * 100 - 10, buoy_y - 10, buoy["position"] * 100 + 10, buoy_y + 10, fill="red")
+    buoy_y = HEIGHT // 2 - wave_height * 50 - (buoy["mass"] - buoy["volume"]) * 10
+    x_pos = int(buoy["position"] * WIDTH / len(waves))
+    pygame.draw.circle(screen, RED, (x_pos, int(buoy_y)), 10)
 
-# аниматор
-def update(frame):
-    canvas.delete("all")  # Очистка канваса для обновления графика
 
-    # волны
-    for wave in waves:
-        draw_wave(wave, frame)
+# Функция для отображения окна ввода параметров
+def get_input(prompt):
+    font = pygame.font.Font(None, 36)
+    input_box = pygame.Rect(WIDTH // 4, HEIGHT // 3, WIDTH // 2, 50)
+    input_text = ""
+    active = True
 
-    # поплавки
-    for buoy in buoys:
-        draw_buoy(buoy, frame)
+    while active:
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    active = False
+                elif event.key == pygame.K_BACKSPACE:
+                    input_text = input_text[:-1]
+                else:
+                    input_text += event.unicode
 
-    # Плавное обновление через 30 миллисекунд
-    root.after(30, update, frame + 1)
+        screen.fill(WHITE)
+        prompt_surface = font.render(prompt, True, BLACK)
+        input_surface = font.render(input_text, True, BLACK)
+        pygame.draw.rect(screen, GRAY, input_box)
+        pygame.draw.rect(screen, BLACK, input_box, 2)
+        screen.blit(prompt_surface, (WIDTH // 4, HEIGHT // 3 - 50))
+        screen.blit(input_surface, (input_box.x + 10, input_box.y + 10))
+        pygame.display.flip()
 
-# Функции интерфейса для добавления/удаления волн и поплавков
-def add_wave():
-    try:
-        amplitude = float(simpledialog.askstring("Добавить волну", "Введите амплитуду:"))
-        period = float(simpledialog.askstring("Добавить волну", "Введите период:"))
-        speed = float(simpledialog.askstring("Добавить волну", "Введите скорость:"))
-        waves.append({"amplitude": amplitude, "period": period, "speed": speed})
-        update(0)
-    except (ValueError, TypeError):
-        messagebox.showerror("Ошибка", "Некорректный ввод. Введите числовые значения.")
+    return input_text
 
-def add_buoy():
-    try:
-        mass = float(simpledialog.askstring("Добавить поплавок", "Введите массу:"))
-        volume = float(simpledialog.askstring("Добавить поплавок", "Введите объем:"))
-        position = float(simpledialog.askstring("Добавить поплавок", "Введите позицию:"))
-        buoys.append({"mass": mass, "volume": volume, "position": position})
-        update(0)
-    except (ValueError, TypeError):
-        messagebox.showerror("Ошибка", "Некорректный ввод. Введите числовые значения.")
 
-def delete_wave():
-    if waves:
-        waves.pop()
-        update(0)  # Обновляем график после удаления волны
+# Основной цикл программы
+def main():
+    running = True
+    clock = pygame.time.Clock()
+    frame = 0
 
-def delete_buoy():
-    if buoys:
-        buoys.pop()
-        update(0)  # Обновляем график после удаления поплавка
+    while running:
+        screen.fill(WHITE)  # Очистка экрана
 
-# Функция для обновления графика
-def reset_graph():
-    update(0)
+        # Обработка событий
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                running = False
 
-# Панель кнопок для управления
-control_frame = tk.Frame(root)
-control_frame.pack(side=tk.BOTTOM, fill=tk.X)
+            if event.type == MOUSEBUTTONDOWN:
+                if event.button == 1:  # Левый клик мыши
+                    mouse_pos = event.pos
+                    if 10 <= mouse_pos[0] <= 210 and HEIGHT - 50 <= mouse_pos[1] <= HEIGHT - 20:
+                        amplitude = float(get_input("Введите амплитуду волны:"))
+                        period = float(get_input("Введите период волны:"))
+                        speed = float(get_input("Введите скорость волны:"))
+                        waves.append({"amplitude": amplitude, "period": period, "speed": speed})
+                    elif 220 <= mouse_pos[0] <= 420 and HEIGHT - 50 <= mouse_pos[1] <= HEIGHT - 20:
+                        mass = float(get_input("Введите массу поплавка:"))
+                        volume = float(get_input("Введите объем поплавка:"))
+                        position = float(get_input("Введите позицию поплавка:"))
+                        buoys.append({"mass": mass, "volume": volume, "position": position})
+                    elif 430 <= mouse_pos[0] <= 630 and HEIGHT - 50 <= mouse_pos[1] <= HEIGHT - 20:
+                        if waves:
+                            waves.pop()
+                    elif 640 <= mouse_pos[0] <= 840 and HEIGHT - 50 <= mouse_pos[1] <= HEIGHT - 20:
+                        if buoys:
+                            buoys.pop()
 
-tk.Button(control_frame, text="Добавить волну", command=add_wave).pack(side=tk.LEFT, padx=5, pady=5)
-tk.Button(control_frame, text="Удалить волну", command=delete_wave).pack(side=tk.LEFT, padx=5, pady=5)
-tk.Button(control_frame, text="Добавить поплавок", command=add_buoy).pack(side=tk.LEFT, padx=5, pady=5)
-tk.Button(control_frame, text="Удалить поплавок", command=delete_buoy).pack(side=tk.LEFT, padx=5, pady=5)
-tk.Button(control_frame, text="Обновить график", command=reset_graph).pack(side=tk.LEFT, padx=5, pady=5)
+        # Рисуем волны
+        for wave in waves:
+            draw_wave(wave, frame)
 
-update(0)
+        # Рисуем поплавки
+        for buoy in buoys:
+            draw_buoy(buoy, frame)
 
-# Запуск интерфейса
-root.mainloop()
+        # Кнопки управления
+        font = pygame.font.Font(None, 36)
+
+        pygame.draw.rect(screen, BLACK, (10, HEIGHT - 50, 200, 30))
+        add_wave_button = font.render('Добавить волну', True, WHITE)
+        screen.blit(add_wave_button, (15, HEIGHT - 45))
+
+        pygame.draw.rect(screen, BLACK, (220, HEIGHT - 50, 200, 30))
+        add_buoy_button = font.render('Добавить поплавок', True, WHITE)
+        screen.blit(add_buoy_button, (225, HEIGHT - 45))
+
+        pygame.draw.rect(screen, BLACK, (430, HEIGHT - 50, 200, 30))
+        delete_wave_button = font.render('Удалить волну', True, WHITE)
+        screen.blit(delete_wave_button, (435, HEIGHT - 45))
+
+        pygame.draw.rect(screen, BLACK, (640, HEIGHT - 50, 200, 30))
+        delete_buoy_button = font.render('Удалить поплавок', True, WHITE)
+        screen.blit(delete_buoy_button, (645, HEIGHT - 45))
+
+        # Обновление экрана
+        pygame.display.flip()
+        frame += 1
+        clock.tick(50)  # Ограничение FPS
+
+    pygame.quit()
+    sys.exit()
+
+
+if __name__ == "__main__":
+    main()
